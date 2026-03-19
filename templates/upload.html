@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Upload Roster — autoroster{% endblock %}
+
+{% block content %}
+<div class="page-container">
+  <div class="page-header">
+    <h1>Upload roster screenshot</h1>
+    <p>Take a screenshot of your shift calendar and upload it below. Supported shift codes: <strong>A</strong> (Day), <strong>N</strong> (Night), <strong>P</strong> (Afternoon). Day Off (DO) entries are ignored.</p>
+  </div>
+
+  <form id="upload-form" method="post" enctype="multipart/form-data" class="upload-form card">
+
+    <div class="drop-zone" id="drop-zone">
+      <div class="drop-zone-inner" id="drop-zone-inner">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="17 8 12 3 7 8"/>
+          <line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+        <p class="drop-label">Drag and drop your screenshot here</p>
+        <p class="drop-sub">or</p>
+        <label for="screenshot" class="btn btn-secondary">Choose image</label>
+        <input id="screenshot" name="screenshot" type="file" accept="image/png,image/jpeg" required hidden />
+        <p class="drop-filename" id="drop-filename"></p>
+      </div>
+      <div class="drop-preview" id="drop-preview" hidden>
+        <img id="preview-img" src="" alt="Preview" />
+        <button type="button" class="btn btn-ghost btn-sm remove-btn" id="remove-img">✕ Remove</button>
+      </div>
+    </div>
+
+    <details class="hint-section">
+      <summary>Specify month / year (optional)</summary>
+      <p class="hint-text">If the month and year aren't visible in the screenshot, enter them manually.</p>
+      <div class="hint-fields">
+        <label class="field-label">
+          Month (1–12)
+          <input type="number" name="month" min="1" max="12" placeholder="e.g. 6" class="input-sm" />
+        </label>
+        <label class="field-label">
+          Year
+          <input type="number" name="year" min="2020" max="2099" placeholder="e.g. 2026" class="input-sm" />
+        </label>
+      </div>
+    </details>
+
+    <button type="submit" class="btn btn-primary" id="submit-btn">
+      Parse roster
+    </button>
+  </form>
+</div>
+{% endblock %}

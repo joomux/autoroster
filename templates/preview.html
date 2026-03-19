@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Preview Events — autoroster{% endblock %}
+
+{% block content %}
+<div class="page-container">
+  <div class="page-header">
+    <h1>Preview shifts</h1>
+    {% if month and year %}
+      <p>{{ month_name(month) }} {{ year }} — {{ events|length }} shift{{ 's' if events|length != 1 else '' }} found</p>
+    {% else %}
+      <p>{{ events|length }} shift{{ 's' if events|length != 1 else '' }} found</p>
+    {% endif %}
+  </div>
+
+  <form method="post" action="{{ url_for('confirm') }}">
+
+    <!-- Calendar selector -->
+    <div class="card calendar-selector">
+      <label class="field-label" for="calendar-select">
+        Add to calendar
+      </label>
+      {% if calendars %}
+        <select id="calendar-select" name="calendar_id" class="select" required>
+          <option value="" disabled selected>Select a calendar…</option>
+          {% for cal in calendars %}
+            <option value="{{ cal.id }}">{{ cal.name }}</option>
+          {% endfor %}
+        </select>
+      {% else %}
+        <p class="alert alert-error">Could not load your calendars. Please <a href="{{ url_for('logout') }}">sign in again</a>.</p>
+        <input type="hidden" name="calendar_id" value="" />
+      {% endif %}
+    </div>
+
+    <!-- Events table -->
+    <div class="card events-card">
+      <table class="events-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Shift</th>
+            <th>Start</th>
+            <th>End</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for event in events %}
+          <tr class="shift-row shift-{{ event.shift_code | lower }}">
+            <td>{{ event.date | format_date }}</td>
+            <td>
+              <span class="shift-badge shift-badge-{{ event.shift_code | lower }}">
+                {{ event.shift_code }}
+              </span>
+              {{ event.title }}
+            </td>
+            <td>{{ event.start | format_time }}</td>
+            <td>{{ event.end | format_time }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="action-bar">
+      <a href="{{ url_for('upload') }}" class="btn btn-ghost">← Upload different screenshot</a>
+      <button type="submit" class="btn btn-primary" {% if not calendars %}disabled{% endif %}>
+        Add {{ events|length }} event{{ 's' if events|length != 1 else '' }} to calendar
+      </button>
+    </div>
+
+  </form>
+</div>
+{% endblock %}
