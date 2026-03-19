@@ -8,7 +8,7 @@ App-Specific Passwords.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 import caldav
@@ -42,14 +42,13 @@ def get_calendars(credentials: dict) -> list[dict]:
     return [{"id": str(cal.url), "name": cal.name or str(cal.url)} for cal in cals]
 
 
-def create_events(credentials: dict, calendar_url: str, events: list[Event]) -> int:
-    """Create events in the specified iCloud calendar. Returns count created."""
+def create_events(credentials: dict, calendar_url: str, events: list[Event]) -> list[str]:
+    """Create events in the specified iCloud calendar. Returns list of created event UIDs."""
     client = _client(credentials)
     calendar = client.calendar(url=calendar_url)
-    count = 0
+    uids: list[str] = []
     for event in events:
         uid = str(uuid.uuid4())
-        # iCalendar format requires UTC or floating times; we use floating local time.
         fmt = "%Y%m%dT%H%M%S"
         dtstart = event.start.strftime(fmt)
         dtend = event.end.strftime(fmt)
@@ -68,5 +67,17 @@ def create_events(credentials: dict, calendar_url: str, events: list[Event]) -> 
             "END:VCALENDAR\r\n"
         )
         calendar.save_event(ical)
-        count += 1
-    return count
+        uids.append(uid)
+    return uids
+
+
+def delete_events(credentials: dict, calendar_url: str, uids: list[str]) -> None:
+    """Delete events from iCloud calendar by UID. Best-effort: ignores individual failures."""
+    client = _client(credentials)
+    calendar = client.calendar(url=calendar_url)
+    for uid in uids:
+        try:
+            obj = calendar.calendar_object_by_uid(uid)
+            obj.delete()
+        except Exception:
+            pass

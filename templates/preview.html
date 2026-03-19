@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block title %}Preview Events — autoroster{% endblock %}
+{% block title %}Preview shifts — autoroster{% endblock %}
 
 {% block content %}
 <div class="page-container">
   <div class="page-header">
-    <h1>Preview shifts</h1>
+    <h1>Review shifts</h1>
     {% if month and year %}
       <p>{{ month_name(month) }} {{ year }} — {{ events|length }} shift{{ 's' if events|length != 1 else '' }} found</p>
     {% else %}
@@ -12,7 +12,13 @@
     {% endif %}
   </div>
 
-  <form method="post" action="{{ url_for('confirm') }}">
+  {% if thumbnail_b64 %}
+  <div class="roster-thumbnail card">
+    <img src="data:image/jpeg;base64,{{ thumbnail_b64 }}" alt="Uploaded roster" />
+  </div>
+  {% endif %}
+
+  <form id="confirm-form" method="post" action="{{ url_for('confirm') }}">
 
     <!-- Calendar selector -->
     <div class="card calendar-selector">
@@ -63,11 +69,76 @@
 
     <div class="action-bar">
       <a href="{{ url_for('upload') }}" class="btn btn-ghost">← Upload different screenshot</a>
-      <button type="submit" class="btn btn-primary" {% if not calendars %}disabled{% endif %}>
-        Add {{ events|length }} event{{ 's' if events|length != 1 else '' }} to calendar
+      <button
+        type="button"
+        class="btn btn-primary"
+        id="add-btn"
+        data-count="{{ events|length }}"
+        {% if not calendars %}disabled{% endif %}
+      >
+        Add {{ events|length }} shift{{ 's' if events|length != 1 else '' }} to calendar
       </button>
     </div>
 
   </form>
 </div>
+
+<!-- Confirmation modal -->
+<dialog id="confirm-dialog" class="modal">
+  <div class="modal-box">
+    <h2 class="modal-title">Confirm</h2>
+    <p id="modal-message" class="modal-message"></p>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" id="modal-cancel">Cancel</button>
+      <button type="button" class="btn btn-primary" id="modal-confirm">Add to calendar</button>
+    </div>
+  </div>
+</dialog>
+
+<script>
+(function () {
+  const addBtn = document.getElementById("add-btn");
+  const dialog = document.getElementById("confirm-dialog");
+  const modalMsg = document.getElementById("modal-message");
+  const modalConfirm = document.getElementById("modal-confirm");
+  const modalCancel = document.getElementById("modal-cancel");
+  const calSelect = document.getElementById("calendar-select");
+  const form = document.getElementById("confirm-form");
+
+  if (!addBtn || !dialog) return;
+
+  addBtn.addEventListener("click", () => {
+    const count = addBtn.dataset.count;
+    const calName = calSelect
+      ? calSelect.options[calSelect.selectedIndex]?.text
+      : null;
+
+    if (calSelect && !calSelect.value) {
+      calSelect.focus();
+      return;
+    }
+
+    const noun = count == 1 ? "shift" : "shifts";
+    modalMsg.textContent = calName
+      ? `Add ${count} ${noun} to "${calName}"?`
+      : `Add ${count} ${noun} to your calendar?`;
+
+    dialog.showModal();
+  });
+
+  modalCancel.addEventListener("click", () => dialog.close());
+
+  modalConfirm.addEventListener("click", () => {
+    dialog.close();
+    modalConfirm.disabled = true;
+    modalConfirm.textContent = "Adding…";
+    form.submit();
+  });
+
+  // Close on backdrop click
+  dialog.addEventListener("click", (e) => {
+    if (e.target === dialog) dialog.close();
+  });
+})();
+</script>
 {% endblock %}
