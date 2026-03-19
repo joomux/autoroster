@@ -1,6 +1,9 @@
 """Google OAuth 2.0 authentication and token management."""
 
+import base64
+import hashlib
 import os
+import secrets
 
 import requests
 from flask import Blueprint, redirect, request, session, url_for
@@ -34,15 +37,29 @@ def _build_flow() -> Flow:
     return flow
 
 
+def _generate_pkce() -> tuple[str, str]:
+    code_verifier = secrets.token_urlsafe(96)
+    code_challenge = (
+        base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode()).digest())
+        .rstrip(b"=")
+        .decode()
+    )
+    return code_verifier, code_challenge
+
+
 @google_bp.route("/login")
 def login():
     flow = _build_flow()
+    code_verifier, code_challenge = _generate_pkce()
     auth_url, state = flow.authorization_url(
         access_type="offline",
         include_granted_scopes="true",
         prompt="consent",
+        code_challenge=code_challenge,
+        code_challenge_method="S256",
     )
     session["google_oauth_state"] = state
+    session["code_verifier"] = code_verifier
     return redirect(auth_url)
 
 
@@ -52,9 +69,10 @@ def callback():
     if state is None or state != request.args.get("state"):
         return redirect(url_for("login"))
 
+    code_verifier = session.pop("code_verifier", None)
     flow = _build_flow()
     authorization_response = request.url.replace("http://", "https://", 1)
-    flow.fetch_token(authorization_response=authorization_response)
+    flow.fetch_token(authorization_response=authorization_response, code_verifier=code_verifier)
 
     creds = flow.credentials
     credentials_dict = {
