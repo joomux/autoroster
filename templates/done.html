@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Done — autoroster{% endblock %}
+
+{% block content %}
+<div class="page-container-narrow done-page">
+  <div class="done-icon" aria-hidden="true">
+    <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <circle cx="12" cy="12" r="10"/>
+      <polyline points="8 12 11 15 16 9"/>
+    </svg>
+  </div>
+
+  <h1 class="done-title">
+    {{ count }} shift{{ 's' if count != 1 else '' }} added
+  </h1>
+  <p class="done-sub">
+    Your calendar has been updated. Check your calendar app to see the new events.
+  </p>
+
+  <div class="done-actions">
+    <a href="{{ url_for('upload') }}" class="btn btn-primary">Upload another roster</a>
+
+    <form method="post" action="{{ url_for('undo') }}" id="undo-form">
+      <button type="button" class="btn btn-ghost btn-danger" id="undo-btn">
+        Undo — remove these events
+      </button>
+    </form>
+  </div>
+
+  <p class="done-undo-note">
+    Undo will permanently delete the {{ count }} shift event{{ 's' if count != 1 else '' }} just created.
+  </p>
+</div>
+
+<!-- Undo confirmation modal -->
+<dialog id="undo-dialog" class="modal">
+  <div class="modal-box">
+    <h2 class="modal-title">Remove events?</h2>
+    <p class="modal-message">
+      This will permanently delete the {{ count }} shift event{{ 's' if count != 1 else '' }} just added to your calendar.
+    </p>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" id="undo-cancel">Keep events</button>
+      <button type="button" class="btn btn-danger" id="undo-confirm">Yes, remove them</button>
+    </div>
+  </div>
+</dialog>
+
+<script>
+(function () {
+  const undoBtn = document.getElementById("undo-btn");
+  const dialog = document.getElementById("undo-dialog");
+  const confirmBtn = document.getElementById("undo-confirm");
+  const cancelBtn = document.getElementById("undo-cancel");
+  const form = document.getElementById("undo-form");
+
+  undoBtn.addEventListener("click", () => dialog.showModal());
+  cancelBtn.addEventListener("click", () => dialog.close());
+  confirmBtn.addEventListener("click", () => {
+    dialog.close();
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = "Removing…";
+    form.submit();
+  });
+
+  dialog.addEventListener("click", (e) => {
+    if (e.target === dialog) dialog.close();
+  });
+})();
+</script>
+{% endblock %}

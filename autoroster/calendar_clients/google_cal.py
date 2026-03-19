@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import TYPE_CHECKING
 
 from google.oauth2.credentials import Credentials
@@ -36,19 +37,27 @@ def get_calendars(credentials_dict: dict) -> list[dict]:
     ]
 
 
-def create_events(credentials_dict: dict, calendar_id: str, events: list[Event]) -> int:
-    """Insert events into the specified Google Calendar. Returns count created."""
-    import os
-
+def create_events(credentials_dict: dict, calendar_id: str, events: list[Event]) -> list[str]:
+    """Insert events into the specified Google Calendar. Returns list of created event IDs."""
     tz = os.environ.get("TIMEZONE", LOCAL_TIMEZONE)
     service = _build_service(credentials_dict)
-    count = 0
+    event_ids: list[str] = []
     for event in events:
         body = {
             "summary": event.title,
             "start": {"dateTime": event.start.isoformat(), "timeZone": tz},
             "end": {"dateTime": event.end.isoformat(), "timeZone": tz},
         }
-        service.events().insert(calendarId=calendar_id, body=body).execute()
-        count += 1
-    return count
+        result = service.events().insert(calendarId=calendar_id, body=body).execute()
+        event_ids.append(result["id"])
+    return event_ids
+
+
+def delete_events(credentials_dict: dict, calendar_id: str, event_ids: list[str]) -> None:
+    """Delete events from Google Calendar by ID. Best-effort: ignores individual failures."""
+    service = _build_service(credentials_dict)
+    for eid in event_ids:
+        try:
+            service.events().delete(calendarId=calendar_id, eventId=eid).execute()
+        except Exception:
+            pass

@@ -342,6 +342,97 @@ a:hover { text-decoration: underline; }
   gap: 12px;
 }
 
+/* ---- Roster thumbnail (preview page) ---- */
+.roster-thumbnail {
+  padding: 12px;
+  margin-bottom: 16px;
+  text-align: center;
+}
+.roster-thumbnail img {
+  max-width: 100%;
+  max-height: 320px;
+  border-radius: 6px;
+  display: block;
+  margin: 0 auto;
+}
+
+/* ---- Confirmation modal ---- */
+.modal {
+  border: none;
+  border-radius: 14px;
+  padding: 0;
+  box-shadow: 0 8px 40px rgba(0,0,0,.18);
+  max-width: 400px;
+  width: calc(100% - 48px);
+}
+.modal::backdrop {
+  background: rgba(0,0,0,.45);
+}
+.modal-box {
+  padding: 32px 28px 24px;
+}
+.modal-title {
+  margin: 0 0 10px;
+  font-size: 18px;
+  font-weight: 700;
+}
+.modal-message {
+  margin: 0 0 24px;
+  color: var(--clr-muted);
+  font-size: 15px;
+  line-height: 1.5;
+}
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+/* ---- Danger button variant ---- */
+.btn-danger {
+  background: var(--clr-danger);
+  color: #fff;
+}
+.btn-danger:hover:not(:disabled) { background: #b91c1c; }
+
+/* ---- Done page ---- */
+.done-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding-top: 48px;
+}
+.done-icon {
+  color: var(--clr-success);
+  margin-bottom: 16px;
+}
+.done-title {
+  margin: 0 0 8px;
+  font-size: 26px;
+  font-weight: 700;
+}
+.done-sub {
+  margin: 0 0 32px;
+  color: var(--clr-muted);
+  max-width: 340px;
+}
+.done-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: 300px;
+  margin-bottom: 16px;
+}
+.done-actions form { width: 100%; }
+.done-actions .btn { width: 100%; justify-content: center; }
+.done-undo-note {
+  font-size: 12px;
+  color: var(--clr-muted);
+  max-width: 300px;
+}
+
 /* ---- iCloud connect ---- */
 .icloud-steps {
   background: var(--clr-bg);

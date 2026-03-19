@@ -1,9 +1,12 @@
+import base64
+import io
 import os
 import tempfile
 from functools import wraps
 
 from dotenv import load_dotenv
 from flask import Flask, flash, redirect, render_template, request, session, url_for
+from PIL import Image
 
 load_dotenv()
 
@@ -69,6 +72,17 @@ def allowed_file(filename: str) -> bool:
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
+def _make_thumbnail_b64(image_path: str, max_width: int = 520) -> str:
+    """Return a base64-encoded JPEG thumbnail of the image, for inline display."""
+    img = Image.open(image_path).convert("RGB")
+    if img.width > max_width:
+        ratio = max_width / img.width
+        img = img.resize((max_width, int(img.height * ratio)), Image.LANCZOS)
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=55)
+    return base64.b64encode(buf.getvalue()).decode()
+
+
 @app.route("/")
 def index():
     if "user" in session:
@@ -92,60 +106,78 @@ def logout():
 @app.route("/upload", methods=["GET", "POST"])
 @login_required
 def upload():
-    if request.method == "POST":
-        if "screenshot" not in request.files:
-            flash("No file selected.", "error")
-            return redirect(request.url)
+    if request.method == "GET":
+        return render_template("upload.html", user=session["user"])
 
-        file = request.files["screenshot"]
-        if file.filename == "":
-            flash("No file selected.", "error")
-            return redirect(request.url)
+    # POST — parse the uploaded image and render the preview inline
+    if "screenshot" not in request.files:
+        flash("No file selected.", "error")
+        return redirect(request.url)
 
-        if not allowed_file(file.filename):
-            flash("Please upload a PNG or JPG image.", "error")
-            return redirect(request.url)
+    file = request.files["screenshot"]
+    if file.filename == "":
+        flash("No file selected.", "error")
+        return redirect(request.url)
 
-        month_hint = request.form.get("month", "").strip()
-        year_hint = request.form.get("year", "").strip()
-        month_int = int(month_hint) if month_hint.isdigit() and 1 <= int(month_hint) <= 12 else None
-        year_int = int(year_hint) if year_hint.isdigit() and len(year_hint) == 4 else None
+    if not allowed_file(file.filename):
+        flash("Please upload a PNG or JPG image.", "error")
+        return redirect(request.url)
 
-        suffix = "." + file.filename.rsplit(".", 1)[1].lower()
-        tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
-        try:
-            file.save(tmp.name)
-            tmp.close()
+    month_hint = request.form.get("month", "").strip()
+    year_hint = request.form.get("year", "").strip()
+    month_int = int(month_hint) if month_hint.isdigit() and 1 <= int(month_hint) <= 12 else None
+    year_int = int(year_hint) if year_hint.isdigit() and len(year_hint) == 4 else None
 
-            from autoroster.parser import extract_events
-            from autoroster.vision import parse_calendar_image
+    suffix = "." + file.filename.rsplit(".", 1)[1].lower()
+    tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+    try:
+        file.save(tmp.name)
+        tmp.close()
 
-            raw = parse_calendar_image(tmp.name, month_hint=month_int, year_hint=year_int)
-            events = extract_events(raw)
-        except ValueError as exc:
-            flash(str(exc), "error")
-            return redirect(request.url)
-        finally:
-            os.unlink(tmp.name)
+        from autoroster.parser import extract_events
+        from autoroster.vision import parse_calendar_image
 
-        if not events:
-            flash(
-                "No shift events found. Ensure the screenshot shows a roster with shift codes (A, N, P).",
-                "error",
-            )
-            return redirect(request.url)
+        raw = parse_calendar_image(tmp.name, month_hint=month_int, year_hint=year_int)
+        events = extract_events(raw)
+        thumbnail_b64 = _make_thumbnail_b64(tmp.name)
+    except ValueError as exc:
+        flash(str(exc), "error")
+        return redirect(request.url)
+    finally:
+        os.unlink(tmp.name)
 
-        session["pending_events"] = [e.to_dict() for e in events]
-        session["roster_month"] = raw.get("month")
-        session["roster_year"] = raw.get("year")
-        return redirect(url_for("preview"))
+    if not events:
+        flash(
+            "No shift events found. Ensure the screenshot shows a roster with shift codes (A, N, P).",
+            "error",
+        )
+        return redirect(request.url)
 
-    return render_template("upload.html", user=session["user"])
+    session["pending_events"] = [e.to_dict() for e in events]
+    session["roster_month"] = raw.get("month")
+    session["roster_year"] = raw.get("year")
+
+    calendars = []
+    try:
+        calendars = _get_calendars(session["user"]["provider"])
+    except Exception as exc:
+        flash(f"Could not load calendars: {exc}", "error")
+
+    return render_template(
+        "preview.html",
+        events=[e.to_dict() for e in events],
+        calendars=calendars,
+        user=session["user"],
+        thumbnail_b64=thumbnail_b64,
+        month=raw.get("month"),
+        year=raw.get("year"),
+    )
 
 
 @app.route("/preview")
 @login_required
 def preview():
+    """Fallback GET for preview — used when returning from a confirm error."""
     events = session.get("pending_events")
     if not events:
         return redirect(url_for("upload"))
@@ -162,6 +194,7 @@ def preview():
         events=events,
         calendars=calendars,
         user=session["user"],
+        thumbnail_b64=None,
         month=session.get("roster_month"),
         year=session.get("roster_year"),
     )
@@ -181,14 +214,42 @@ def confirm():
 
     provider = session["user"]["provider"]
     try:
-        count = _write_events(events_data, calendar_id, provider)
+        event_ids = _write_events(events_data, calendar_id, provider)
         session.pop("pending_events", None)
-        noun = "event" if count == 1 else "events"
-        flash(f"Successfully added {count} shift {noun} to your calendar.", "success")
-        return redirect(url_for("upload"))
+        session["last_created"] = {
+            "event_ids": event_ids,
+            "calendar_id": calendar_id,
+            "provider": provider,
+            "count": len(event_ids),
+        }
+        return redirect(url_for("done"))
     except Exception as exc:
         flash(f"Error writing events: {exc}", "error")
         return redirect(url_for("preview"))
+
+
+@app.route("/done")
+@login_required
+def done():
+    last = session.get("last_created")
+    if not last:
+        return redirect(url_for("upload"))
+    return render_template("done.html", count=last["count"], user=session["user"])
+
+
+@app.route("/undo", methods=["POST"])
+@login_required
+def undo():
+    last = session.pop("last_created", None)
+    if not last:
+        return redirect(url_for("upload"))
+    try:
+        _delete_events(last["event_ids"], last["calendar_id"], last["provider"])
+        noun = "event" if last["count"] == 1 else "events"
+        flash(f"Removed {last['count']} shift {noun} from your calendar.", "success")
+    except Exception as exc:
+        flash(f"Could not remove events: {exc}", "error")
+    return redirect(url_for("upload"))
 
 
 def _get_calendars(provider: str) -> list:
@@ -203,7 +264,7 @@ def _get_calendars(provider: str) -> list:
     return []
 
 
-def _write_events(events_data: list, calendar_id: str, provider: str) -> int:
+def _write_events(events_data: list, calendar_id: str, provider: str) -> list[str]:
     from autoroster.parser import Event
 
     events = [Event.from_dict(e) for e in events_data]
@@ -215,7 +276,18 @@ def _write_events(events_data: list, calendar_id: str, provider: str) -> int:
         from autoroster.calendar_clients.icloud_cal import create_events
 
         return create_events(session["icloud_credentials"], calendar_id, events)
-    return 0
+    return []
+
+
+def _delete_events(event_ids: list[str], calendar_id: str, provider: str) -> None:
+    if provider == "google":
+        from autoroster.calendar_clients.google_cal import delete_events
+
+        delete_events(session["credentials"], calendar_id, event_ids)
+    elif provider == "apple":
+        from autoroster.calendar_clients.icloud_cal import delete_events
+
+        delete_events(session["icloud_credentials"], calendar_id, event_ids)
 
 
 if __name__ == "__main__":
