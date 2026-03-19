@@ -12,7 +12,7 @@ from typing import Optional
 import cv2
 import numpy as np
 import pytesseract
-from PIL import Image, ImageEnhance
+from PIL import Image
 
 SHIFT_CODES = {"A", "N", "P", "DO"}
 
@@ -32,6 +32,10 @@ MONTH_NAMES = [
 MONTH_ABBREVS = [m[:3] for m in MONTH_NAMES]
 
 TIME_RE = re.compile(r"^\d{1,2}:\d{2}$")
+
+# Tesseract config: sparse-text mode works best for grid-layout calendars where
+# text is scattered across cells. oem 3 = best LSTM engine.
+TESS_CONFIG = r"--oem 3 --psm 11"
 
 
 def parse_calendar_image(
@@ -54,8 +58,8 @@ def parse_calendar_image(
         ValueError: If the image does not appear to be a roster calendar.
     """
     pil_img = _load_and_enhance(image_path)
-    full_text = pytesseract.image_to_string(pil_img)
-    ocr_data = pytesseract.image_to_data(pil_img, output_type=pytesseract.Output.DICT)
+    full_text = pytesseract.image_to_string(pil_img, config=TESS_CONFIG)
+    ocr_data = pytesseract.image_to_data(pil_img, config=TESS_CONFIG, output_type=pytesseract.Output.DICT)
 
     detected_months = _detect_months(full_text)
     # month_hint overrides OCR only when OCR fails; if OCR finds months, trust it
@@ -89,25 +93,43 @@ def parse_calendar_image(
 # ---------------------------------------------------------------------------
 
 def _load_and_enhance(image_path: str) -> Image.Image:
-    """Load the image and apply preprocessing to improve OCR accuracy."""
+    """Load and preprocess the image to maximise Tesseract accuracy.
+
+    Key steps:
+    - Upscale to at least 1800 px on the long edge (Tesseract degrades rapidly
+      below ~150 DPI equivalent).
+    - Convert to grayscale.
+    - Apply adaptive thresholding so coloured cell backgrounds (common in
+      roster apps) become plain white, leaving text black.
+    """
     cv_img = cv2.imread(image_path)
+    if cv_img is None:
+        raise ValueError(f"Could not read image: {image_path}")
+
+    # Upscale so the long edge is at least 1800 px.
+    h, w = cv_img.shape[:2]
+    scale = max(1.0, 1800 / max(h, w))
+    if scale > 1.0:
+        cv_img = cv2.resize(
+            cv_img,
+            (int(w * scale), int(h * scale)),
+            interpolation=cv2.INTER_LANCZOS4,
+        )
+
     gray = cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY)
 
-    # CLAHE contrast enhancement
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-    gray = clahe.apply(gray)
+    # Adaptive threshold: handles coloured backgrounds much better than CLAHE.
+    # blockSize=21 works well for typical calendar cell sizes at 1800 px scale.
+    binary = cv2.adaptiveThreshold(
+        gray,
+        255,
+        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY,
+        blockSize=21,
+        C=8,
+    )
 
-    # Mild sharpening kernel
-    kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]], dtype=np.float32)
-    gray = cv2.filter2D(gray, -1, kernel)
-
-    pil_img = Image.fromarray(gray).convert("RGB")
-
-    # Additional Pillow contrast boost
-    enhancer = ImageEnhance.Contrast(pil_img)
-    pil_img = enhancer.enhance(1.5)
-
-    return pil_img
+    return Image.fromarray(binary)
 
 
 def _detect_months(text: str) -> list[int]:
@@ -182,7 +204,9 @@ def _extract_shifts(
     for i in range(len(data["text"])):
         raw = data["text"][i]
         conf = int(data["conf"][i])
-        if conf < 25 or not raw.strip():
+        # Confidence of -1 means Tesseract couldn't classify the block at all;
+        # threshold of 10 keeps weak but plausible single-letter detections.
+        if conf < 10 or not raw.strip():
             continue
 
         token = _clean_token(raw)
@@ -228,11 +252,15 @@ def _extract_shifts(
         best_date = None
         best_score = float("inf")
 
+        # Allow the shift code to sit up to half a cell ABOVE the date number
+        # (some layouts put the shift code in the top portion of the cell).
+        max_above = cell_w * 0.5
+
         for date_w in dates:
             dx = abs(shift_w["cx"] - date_w["cx"])
             dy = shift_w["cy"] - date_w["cy"]  # positive = shift is below date
 
-            if dy < -40:
+            if dy < -max_above:
                 continue
             if dx > cell_w:
                 continue
