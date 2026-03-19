@@ -53,7 +53,8 @@ def callback():
         return redirect(url_for("login"))
 
     flow = _build_flow()
-    flow.fetch_token(authorization_response=request.url)
+    authorization_response = request.url.replace("http://", "https://", 1)
+    flow.fetch_token(authorization_response=authorization_response)
 
     creds = flow.credentials
     credentials_dict = {
