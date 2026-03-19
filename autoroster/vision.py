@@ -31,6 +31,8 @@ MONTH_NAMES = [
 ]
 MONTH_ABBREVS = [m[:3] for m in MONTH_NAMES]
 
+TIME_RE = re.compile(r"^\d{1,2}:\d{2}$")
+
 
 def parse_calendar_image(
     image_path: str,
@@ -46,7 +48,7 @@ def parse_calendar_image(
 
     Returns:
         Dict with keys: ``year`` (int|None), ``month`` (int|None),
-        ``shifts`` ({date_int: shift_code}).
+        ``months`` (list[int]), ``shifts`` ({(month, day): {code, start_time, end_time}}).
 
     Raises:
         ValueError: If the image does not appear to be a roster calendar.
@@ -55,10 +57,13 @@ def parse_calendar_image(
     full_text = pytesseract.image_to_string(pil_img)
     ocr_data = pytesseract.image_to_data(pil_img, output_type=pytesseract.Output.DICT)
 
-    month = month_hint or _detect_month(full_text)
+    detected_months = _detect_months(full_text)
+    # month_hint overrides OCR only when OCR fails; if OCR finds months, trust it
+    months = detected_months if detected_months else ([month_hint] if month_hint else [])
+
     year = year_hint or _detect_year(full_text)
 
-    shifts = _extract_shifts(ocr_data, pil_img.size)
+    shifts = _extract_shifts(ocr_data, pil_img.size, months)
 
     if not shifts:
         raise ValueError(
@@ -71,7 +76,12 @@ def parse_calendar_image(
             "Ensure the full calendar is visible and the image is clear."
         )
 
-    return {"year": year, "month": month, "shifts": shifts}
+    return {
+        "year": year,
+        "month": months[0] if months else None,
+        "months": months,
+        "shifts": shifts,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -80,7 +90,6 @@ def parse_calendar_image(
 
 def _load_and_enhance(image_path: str) -> Image.Image:
     """Load the image and apply preprocessing to improve OCR accuracy."""
-    # Use OpenCV to deskew and sharpen, then hand off to Pillow/pytesseract
     cv_img = cv2.imread(image_path)
     gray = cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY)
 
@@ -101,13 +110,24 @@ def _load_and_enhance(image_path: str) -> Image.Image:
     return pil_img
 
 
-def _detect_month(text: str) -> Optional[int]:
-    """Return a month number (1–12) found in OCR text, or None."""
+def _detect_months(text: str) -> list[int]:
+    """Return month numbers (1–12) found in OCR text, in the order they appear."""
     text_lower = text.lower()
+    positions: list[tuple[int, int]] = []
     for i, name in enumerate(MONTH_NAMES):
-        if name in text_lower or MONTH_ABBREVS[i] in text_lower:
-            return i + 1
-    return None
+        for pattern in [name, MONTH_ABBREVS[i]]:
+            idx = text_lower.find(pattern)
+            if idx != -1:
+                positions.append((idx, i + 1))
+                break  # only count each month once
+    positions.sort()
+    seen: set[int] = set()
+    result: list[int] = []
+    for _, month_num in positions:
+        if month_num not in seen:
+            result.append(month_num)
+            seen.add(month_num)
+    return result
 
 
 def _detect_year(text: str) -> Optional[int]:
@@ -122,17 +142,40 @@ def _clean_token(raw: str) -> str:
     return OCR_CORRECTIONS.get(upper, upper)
 
 
-def _extract_shifts(data: dict, image_size: tuple[int, int]) -> dict[int, str]:
-    """Match shift codes to their associated date numbers using bounding-box positions.
+def _find_nearby_times(
+    shift_w: dict, time_words: list[dict], cell_w: float
+) -> tuple[Optional[str], Optional[str]]:
+    """Return (start_time, end_time) strings found within the same cell as shift_w.
 
-    Strategy:
-    - Collect all words with high enough confidence.
-    - Classify each word as a date (1–31) or shift code.
-    - For each shift code, find the nearest date that is above it or at
-      the same vertical level, within a horizontal distance of one cell width.
+    Times are sorted left-to-right so the earlier x position is the start time.
+    """
+    nearby: list[tuple[int, str]] = []
+    for tw in time_words:
+        dx = abs(shift_w["cx"] - tw["cx"])
+        dy = tw["cy"] - shift_w["cy"]  # positive = time word is below shift code
+        # Accept times within the cell width horizontally, and slightly above
+        # or up to ~1.5 cell heights below the shift code word
+        if dx <= cell_w and -20 <= dy <= cell_w * 1.5:
+            nearby.append((tw["left"], tw["token"]))
+    nearby.sort()  # left-to-right → start time before end time
+    tokens = [t for _, t in nearby]
+    if len(tokens) >= 2:
+        return tokens[0], tokens[1]
+    if len(tokens) == 1:
+        return tokens[0], None
+    return None, None
+
+
+def _extract_shifts(
+    data: dict, image_size: tuple[int, int], months: list[int]
+) -> dict[tuple[Optional[int], int], dict]:
+    """Match shift codes to their associated (month, day) using bounding-box positions.
+
+    Returns:
+        Dict mapping (month, day) → {"code": str, "start_time": str|None, "end_time": str|None}.
+        Month is None if it could not be determined.
     """
     img_w, _ = image_size
-    # Estimate one calendar-cell width: 7 columns (Mon–Sun) with some margin
     cell_w = img_w / 7.5
 
     words: list[dict] = []
@@ -156,15 +199,32 @@ def _extract_shifts(data: dict, image_size: tuple[int, int]) -> dict[int, str]:
                 "token": token,
                 "cx": left + w // 2,
                 "cy": top + h // 2,
+                "top": top,
+                "left": left,
             }
         )
 
     dates = [w for w in words if w["token"].isdigit() and 1 <= int(w["token"]) <= 31]
-    shifts = [w for w in words if w["token"] in SHIFT_CODES]
+    shift_words = [w for w in words if w["token"] in SHIFT_CODES]
+    time_words = [w for w in words if TIME_RE.match(w["token"])]
 
-    result: dict[int, str] = {}
+    # Assign a month to each date word by walking spatially top→bottom, left→right.
+    # When date numbers reset (e.g. go from 28 back to 1), we advance to the next month.
+    sorted_dates = sorted(dates, key=lambda w: (w["top"], w["left"]))
+    month_for_pos: dict[tuple[int, int], Optional[int]] = {}
+    current_month_idx = 0
+    prev_day = -1
+    for dw in sorted_dates:
+        day = int(dw["token"])
+        if day < prev_day - 15 and current_month_idx + 1 < len(months):
+            current_month_idx += 1
+        month = months[current_month_idx] if months else None
+        month_for_pos[(dw["cx"], dw["cy"])] = month
+        prev_day = day
 
-    for shift_w in shifts:
+    result: dict[tuple[Optional[int], int], dict] = {}
+
+    for shift_w in shift_words:
         best_date = None
         best_score = float("inf")
 
@@ -172,10 +232,8 @@ def _extract_shifts(data: dict, image_size: tuple[int, int]) -> dict[int, str]:
             dx = abs(shift_w["cx"] - date_w["cx"])
             dy = shift_w["cy"] - date_w["cy"]  # positive = shift is below date
 
-            # Shift code must not be significantly above the date in its cell
             if dy < -40:
                 continue
-            # Must be in roughly the same column
             if dx > cell_w:
                 continue
 
@@ -185,8 +243,15 @@ def _extract_shifts(data: dict, image_size: tuple[int, int]) -> dict[int, str]:
                 best_date = date_w
 
         if best_date and best_score < cell_w * 2:
-            date_num = int(best_date["token"])
-            if date_num not in result:  # first (closest) match wins
-                result[date_num] = shift_w["token"]
+            day_num = int(best_date["token"])
+            month = month_for_pos.get((best_date["cx"], best_date["cy"]))
+            key = (month, day_num)
+            if key not in result:
+                start_t, end_t = _find_nearby_times(shift_w, time_words, cell_w)
+                result[key] = {
+                    "code": shift_w["token"],
+                    "start_time": start_t,
+                    "end_time": end_t,
+                }
 
     return result
