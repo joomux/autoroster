@@ -1,7 +1,8 @@
-"""Vision module: load a roster screenshot and extract raw shift data via OCR.
+"""Vision module: extract raw shift data from a roster screenshot.
 
-Uses only native Python libraries (Pillow, pytesseract, opencv-python).
-No AI APIs or cloud services are used.
+Uses Google Cloud Vision API for robust OCR that handles coloured cell
+backgrounds, varied fonts, and mixed layouts without manual preprocessing.
+No other AI APIs or cloud services are used.
 """
 
 from __future__ import annotations
@@ -9,20 +10,18 @@ from __future__ import annotations
 import re
 from typing import Optional
 
-import cv2
-import numpy as np
-import pytesseract
+from google.cloud import vision
 from PIL import Image
 
 SHIFT_CODES = {"A", "N", "P", "DO"}
 
-# Map OCR noise patterns to correct codes
+# Map common OCR noise patterns to correct codes
 OCR_CORRECTIONS = {
     "D0": "DO",   # digit zero mistaken for letter O
     "D°": "DO",
     "0O": "DO",
     "DQ": "DO",
-    "DN": "DO",  # rare but seen
+    "DN": "DO",
 }
 
 MONTH_NAMES = [
@@ -32,10 +31,6 @@ MONTH_NAMES = [
 MONTH_ABBREVS = [m[:3] for m in MONTH_NAMES]
 
 TIME_RE = re.compile(r"^\d{1,2}:\d{2}$")
-
-# Tesseract config: sparse-text mode works best for grid-layout calendars where
-# text is scattered across cells. oem 3 = best LSTM engine.
-TESS_CONFIG = r"--oem 3 --psm 11"
 
 
 def parse_calendar_image(
@@ -57,17 +52,14 @@ def parse_calendar_image(
     Raises:
         ValueError: If the image does not appear to be a roster calendar.
     """
-    pil_img = _load_and_enhance(image_path)
-    full_text = pytesseract.image_to_string(pil_img, config=TESS_CONFIG)
-    ocr_data = pytesseract.image_to_data(pil_img, config=TESS_CONFIG, output_type=pytesseract.Output.DICT)
+    words, image_size, full_text = _call_vision_api(image_path)
 
     detected_months = _detect_months(full_text)
-    # month_hint overrides OCR only when OCR fails; if OCR finds months, trust it
     months = detected_months if detected_months else ([month_hint] if month_hint else [])
 
     year = year_hint or _detect_year(full_text)
 
-    shifts = _extract_shifts(ocr_data, pil_img.size, months)
+    shifts = _extract_shifts(words, image_size, months)
 
     if not shifts:
         raise ValueError(
@@ -92,44 +84,60 @@ def parse_calendar_image(
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-def _load_and_enhance(image_path: str) -> Image.Image:
-    """Load and preprocess the image to maximise Tesseract accuracy.
+def _call_vision_api(image_path: str) -> tuple[list[dict], tuple[int, int], str]:
+    """Send the image to Google Cloud Vision and return (words, image_size, full_text).
 
-    Key steps:
-    - Upscale to at least 1800 px on the long edge (Tesseract degrades rapidly
-      below ~150 DPI equivalent).
-    - Convert to grayscale.
-    - Apply adaptive thresholding so coloured cell backgrounds (common in
-      roster apps) become plain white, leaving text black.
+    Uses document_text_detection which preserves word-level bounding boxes and
+    handles dense, structured text (such as calendar grids) better than the
+    basic text_detection endpoint.
     """
-    cv_img = cv2.imread(image_path)
-    if cv_img is None:
-        raise ValueError(f"Could not read image: {image_path}")
+    client = vision.ImageAnnotatorClient()
 
-    # Upscale so the long edge is at least 1800 px.
-    h, w = cv_img.shape[:2]
-    scale = max(1.0, 1800 / max(h, w))
-    if scale > 1.0:
-        cv_img = cv2.resize(
-            cv_img,
-            (int(w * scale), int(h * scale)),
-            interpolation=cv2.INTER_LANCZOS4,
-        )
+    with open(image_path, "rb") as f:
+        content = f.read()
 
-    gray = cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY)
+    response = client.document_text_detection(image=vision.Image(content=content))
 
-    # Adaptive threshold: handles coloured backgrounds much better than CLAHE.
-    # blockSize=21 works well for typical calendar cell sizes at 1800 px scale.
-    binary = cv2.adaptiveThreshold(
-        gray,
-        255,
-        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY,
-        blockSize=21,
-        C=8,
-    )
+    if response.error.message:
+        raise ValueError(f"Google Vision API error: {response.error.message}")
 
-    return Image.fromarray(binary)
+    if not response.full_text_annotation.pages:
+        return [], _pil_size(image_path), ""
+
+    full_text = response.full_text_annotation.text or ""
+    page = response.full_text_annotation.pages[0]
+
+    # page.width/height are 0 when Vision can't determine them — fall back to PIL.
+    if page.width and page.height:
+        image_size: tuple[int, int] = (page.width, page.height)
+    else:
+        image_size = _pil_size(image_path)
+
+    words: list[dict] = []
+    for block in page.blocks:
+        for paragraph in block.paragraphs:
+            for word in paragraph.words:
+                text = "".join(s.text for s in word.symbols)
+                token = _clean_token(text)
+                if not token:
+                    continue
+                verts = word.bounding_box.vertices
+                xs = [v.x for v in verts]
+                ys = [v.y for v in verts]
+                words.append({
+                    "token": token,
+                    "cx": sum(xs) // 4,
+                    "cy": sum(ys) // 4,
+                    "top": min(ys),
+                    "left": min(xs),
+                })
+
+    return words, image_size, full_text
+
+
+def _pil_size(image_path: str) -> tuple[int, int]:
+    with Image.open(image_path) as img:
+        return img.size
 
 
 def _detect_months(text: str) -> list[int]:
@@ -141,7 +149,7 @@ def _detect_months(text: str) -> list[int]:
             idx = text_lower.find(pattern)
             if idx != -1:
                 positions.append((idx, i + 1))
-                break  # only count each month once
+                break
     positions.sort()
     seen: set[int] = set()
     result: list[int] = []
@@ -167,19 +175,14 @@ def _clean_token(raw: str) -> str:
 def _find_nearby_times(
     shift_w: dict, time_words: list[dict], cell_w: float
 ) -> tuple[Optional[str], Optional[str]]:
-    """Return (start_time, end_time) strings found within the same cell as shift_w.
-
-    Times are sorted left-to-right so the earlier x position is the start time.
-    """
+    """Return (start_time, end_time) strings found within the same cell as shift_w."""
     nearby: list[tuple[int, str]] = []
     for tw in time_words:
         dx = abs(shift_w["cx"] - tw["cx"])
         dy = tw["cy"] - shift_w["cy"]  # positive = time word is below shift code
-        # Accept times within the cell width horizontally, and slightly above
-        # or up to ~1.5 cell heights below the shift code word
         if dx <= cell_w and -20 <= dy <= cell_w * 1.5:
             nearby.append((tw["left"], tw["token"]))
-    nearby.sort()  # left-to-right → start time before end time
+    nearby.sort()
     tokens = [t for _, t in nearby]
     if len(tokens) >= 2:
         return tokens[0], tokens[1]
@@ -189,7 +192,7 @@ def _find_nearby_times(
 
 
 def _extract_shifts(
-    data: dict, image_size: tuple[int, int], months: list[int]
+    words: list[dict], image_size: tuple[int, int], months: list[int]
 ) -> dict[tuple[Optional[int], int], dict]:
     """Match shift codes to their associated (month, day) using bounding-box positions.
 
@@ -200,40 +203,12 @@ def _extract_shifts(
     img_w, _ = image_size
     cell_w = img_w / 7.5
 
-    words: list[dict] = []
-    for i in range(len(data["text"])):
-        raw = data["text"][i]
-        conf = int(data["conf"][i])
-        # Confidence of -1 means Tesseract couldn't classify the block at all;
-        # threshold of 10 keeps weak but plausible single-letter detections.
-        if conf < 10 or not raw.strip():
-            continue
-
-        token = _clean_token(raw)
-        if not token:
-            continue
-
-        left = data["left"][i]
-        top = data["top"][i]
-        w = data["width"][i]
-        h = data["height"][i]
-
-        words.append(
-            {
-                "token": token,
-                "cx": left + w // 2,
-                "cy": top + h // 2,
-                "top": top,
-                "left": left,
-            }
-        )
-
     dates = [w for w in words if w["token"].isdigit() and 1 <= int(w["token"]) <= 31]
     shift_words = [w for w in words if w["token"] in SHIFT_CODES]
     time_words = [w for w in words if TIME_RE.match(w["token"])]
 
-    # Assign a month to each date word by walking spatially top→bottom, left→right.
-    # When date numbers reset (e.g. go from 28 back to 1), we advance to the next month.
+    # Assign a month to each date word by walking top→bottom, left→right.
+    # When the day number resets (e.g. 28 → 1) we advance to the next month.
     sorted_dates = sorted(dates, key=lambda w: (w["top"], w["left"]))
     month_for_pos: dict[tuple[int, int], Optional[int]] = {}
     current_month_idx = 0
@@ -251,14 +226,11 @@ def _extract_shifts(
     for shift_w in shift_words:
         best_date = None
         best_score = float("inf")
-
-        # Allow the shift code to sit up to half a cell ABOVE the date number
-        # (some layouts put the shift code in the top portion of the cell).
-        max_above = cell_w * 0.5
+        max_above = cell_w * 0.5  # shift code may sit above the date number
 
         for date_w in dates:
             dx = abs(shift_w["cx"] - date_w["cx"])
-            dy = shift_w["cy"] - date_w["cy"]  # positive = shift is below date
+            dy = shift_w["cy"] - date_w["cy"]  # positive = shift below date
 
             if dy < -max_above:
                 continue
