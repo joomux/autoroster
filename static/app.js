@@ -12,12 +12,16 @@
   const filename = document.getElementById("drop-filename");
   const removeBtn = document.getElementById("remove-img");
   const submitBtn = document.getElementById("submit-btn");
+  const chooseLabel = dropZone ? dropZone.querySelector('label[for="screenshot"]') : null;
 
   if (!dropZone) return;
 
-  // Click anywhere in the drop zone to open file picker
+  // Click anywhere in the drop zone to open file picker,
+  // but skip if the click is on the label (it already triggers the input)
+  // or on the remove button.
   dropZone.addEventListener("click", (e) => {
     if (e.target === removeBtn || removeBtn.contains(e.target)) return;
+    if (chooseLabel && (e.target === chooseLabel || chooseLabel.contains(e.target))) return;
     input.click();
   });
 
@@ -59,6 +63,7 @@
     preview.hidden = true;
     filename.textContent = "";
     previewImg.src = "";
+    if (submitBtn) submitBtn.hidden = true;
   });
 
   function showPreview(file) {
@@ -67,6 +72,7 @@
       previewImg.src = e.target.result;
       inner.hidden = true;
       preview.hidden = false;
+      if (submitBtn) submitBtn.hidden = false;
     };
     reader.readAsDataURL(file);
   }
