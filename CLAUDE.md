@@ -22,7 +22,7 @@ No source code, dependencies, or tooling have been established yet.
 Given the project goals, the expected stack will likely include:
 
 - **Language**: Python (best ecosystem for vision/OCR and calendar integration on macOS)
-- **Vision/OCR**: Anthropic Claude API (multimodal) or Apple Vision framework
+- **Vision/OCR**: Native Python libraries only — `Pillow` for image handling, `pytesseract` (Tesseract OCR) for text extraction, `opencv-python` for image preprocessing if needed
 - **Calendar integration**: `EventKit` via PyObjC, or AppleScript via `subprocess`
 - **CLI interface**: `click` or `argparse` for accepting screenshot paths
 
@@ -94,11 +94,7 @@ black --check .
 
 ## Environment Variables
 
-| Variable | Purpose |
-|---|---|
-| `ANTHROPIC_API_KEY` | Required if using Claude API for vision |
-
-Store these in a `.env` file (git-ignored) and load with `python-dotenv`.
+No external API keys or services are required. The tool runs entirely offline using local libraries.
 
 ## Apple Calendar Integration
 
@@ -122,7 +118,7 @@ subprocess.run(["osascript", "-e", applescript_string], check=True)
 ## Notes for AI Assistants
 
 - This is macOS-specific software — do not suggest Linux/Windows-only solutions for calendar integration
-- Prefer using the Claude API (multimodal) for image parsing rather than heavyweight OCR libraries, given this project's context
+- **Do not use AI APIs or cloud services** — all image parsing must use native Python libraries (Pillow, pytesseract, opencv-python, etc.)
 - When adding dependencies, update `pyproject.toml` or `requirements.txt` and document them
-- Tests should use `pytest` and mock external services (Claude API, Apple Calendar)
+- Tests should use `pytest` and mock external calls (Apple Calendar)
 - Do not over-engineer — this is a focused utility tool
