@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Connect iCloud Calendar — autoroster{% endblock %}
+
+{% block content %}
+<div class="page-container page-container-narrow">
+  <div class="page-header">
+    <h1>Connect iCloud Calendar</h1>
+    <p>Apple Sign In doesn't share your iCloud calendar access directly. You need to provide an <strong>app-specific password</strong> so autoroster can write to iCloud Calendar.</p>
+  </div>
+
+  <div class="card">
+    <ol class="icloud-steps">
+      <li>Go to <strong>appleid.apple.com</strong> and sign in.</li>
+      <li>Under <strong>Sign-In and Security</strong>, select <strong>App-Specific Passwords</strong>.</li>
+      <li>Click <strong>+</strong>, name the password (e.g. "autoroster"), and copy it.</li>
+    </ol>
+
+    <form method="post" action="{{ url_for('apple_auth.icloud_connect') }}" class="icloud-form">
+      <label class="field-label" for="icloud-email">
+        Apple ID (email)
+        <input
+          id="icloud-email"
+          type="email"
+          name="icloud_email"
+          value="{{ prefill_email }}"
+          placeholder="you@icloud.com"
+          required
+          class="input"
+        />
+      </label>
+
+      <label class="field-label" for="app-password">
+        App-specific password
+        <input
+          id="app-password"
+          type="password"
+          name="app_password"
+          placeholder="xxxx-xxxx-xxxx-xxxx"
+          required
+          class="input"
+          autocomplete="new-password"
+        />
+      </label>
+
+      <p class="icloud-note">
+        Your app-specific password is sent directly to iCloud and is never stored on our server.
+      </p>
+
+      <button type="submit" class="btn btn-primary">Connect iCloud Calendar</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
