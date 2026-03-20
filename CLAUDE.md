@@ -9,22 +9,12 @@
 3. Parse the extracted data into structured calendar events
 4. Write events to Apple Calendar via native APIs or AppleScript
 
-## Repository State
-
-This project is in early initialization. Currently the repo contains only:
-- `README.md` — project description
-- `CLAUDE.md` — this file
-
-No source code, dependencies, or tooling have been established yet.
-
 ## Intended Architecture
 
-Given the project goals, the expected stack will likely include:
-
-- **Language**: Python (best ecosystem for vision/OCR and calendar integration on macOS)
-- **Vision/OCR**: Native Python libraries only — `Pillow` for image handling, `pytesseract` (Tesseract OCR) for text extraction, `opencv-python` for image preprocessing if needed
-- **Calendar integration**: `EventKit` via PyObjC, or AppleScript via `subprocess`
-- **CLI interface**: `click` or `argparse` for accepting screenshot paths
+- **Language**: Python
+- **Vision/OCR**: Google Cloud Vision API (`google-cloud-vision`) — handles coloured cell backgrounds and varied fonts robustly. `Pillow` is retained for thumbnail generation.
+- **Calendar integration**: Google Calendar API and iCloud via CalDAV
+- **Web interface**: Flask
 
 ## Development Setup (to be established)
 
@@ -94,7 +84,19 @@ black --check .
 
 ## Environment Variables
 
-No external API keys or services are required. The tool runs entirely offline using local libraries.
+**Cloud Run (production)**: no credentials env var is needed. Attach a service account
+with the *Cloud Vision API User* role to the Cloud Run service; the
+`google-cloud-vision` client discovers credentials automatically via the GCP
+metadata server (Application Default Credentials).
+
+**Local development**: set the path to a service account JSON key:
+
+```
+GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account-key.json
+```
+
+The Google Cloud Vision API is the only external service. Volume is always
+under 1,000 images/month so it stays within the free tier.
 
 ## Apple Calendar Integration
 
@@ -117,8 +119,8 @@ subprocess.run(["osascript", "-e", applescript_string], check=True)
 
 ## Notes for AI Assistants
 
-- This is macOS-specific software — do not suggest Linux/Windows-only solutions for calendar integration
-- **Do not use AI APIs or cloud services** — all image parsing must use native Python libraries (Pillow, pytesseract, opencv-python, etc.)
-- When adding dependencies, update `pyproject.toml` or `requirements.txt` and document them
-- Tests should use `pytest` and mock external calls (Apple Calendar)
+- **Vision/OCR**: Use Google Cloud Vision API (`google-cloud-vision`) for all image parsing. Do not add pytesseract, opencv, or other local OCR libraries — Vision handles coloured backgrounds and varied layouts that local OCR cannot.
+- **No other cloud services** — Vision API is the only permitted external API. Do not add OpenAI, Anthropic, or any other AI API.
+- When adding dependencies, update both `pyproject.toml` and `requirements.txt`
+- Tests should use `pytest` and mock the Vision API client (`google.cloud.vision.ImageAnnotatorClient`)
 - Do not over-engineer — this is a focused utility tool
