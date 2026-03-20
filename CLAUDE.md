@@ -84,11 +84,19 @@ black --check .
 
 ## Environment Variables
 
+**Cloud Run (production)**: no credentials env var is needed. Attach a service account
+with the *Cloud Vision API User* role to the Cloud Run service; the
+`google-cloud-vision` client discovers credentials automatically via the GCP
+metadata server (Application Default Credentials).
+
+**Local development**: set the path to a service account JSON key:
+
 ```
 GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account-key.json
 ```
 
-The Google Cloud Vision API is the only external service. It requires a service account key (see GCP setup below). Volume is always under 1,000 images/month so it stays within the free tier.
+The Google Cloud Vision API is the only external service. Volume is always
+under 1,000 images/month so it stays within the free tier.
 
 ## Apple Calendar Integration
 
