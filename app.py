@@ -143,6 +143,17 @@ def upload():
     except ValueError as exc:
         flash(str(exc), "error")
         return redirect(request.url)
+    except Exception as exc:
+        import anthropic as _anthropic
+        msg = str(exc)
+        if isinstance(exc, _anthropic.AuthenticationError):
+            msg = "Invalid Anthropic API key. Please check the ANTHROPIC_API_KEY environment variable."
+        elif isinstance(exc, _anthropic.BadRequestError) and "credit balance" in msg:
+            msg = "The Anthropic API account has insufficient credits. Please add credits at console.anthropic.com."
+        elif isinstance(exc, _anthropic.APIError):
+            msg = f"Anthropic API error: {msg}"
+        flash(msg, "error")
+        return redirect(request.url)
     finally:
         os.unlink(tmp.name)
 
