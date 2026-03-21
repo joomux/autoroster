@@ -111,6 +111,11 @@ def robots():
     return app.send_static_file("robots.txt")
 
 
+@app.route("/google033ac8bfa05a6917.html")
+def google_site_verification():
+    return app.send_static_file("google033ac8bfa05a6917.html")
+
+
 @app.route("/privacy")
 def privacy():
     return render_template("privacy.html")
