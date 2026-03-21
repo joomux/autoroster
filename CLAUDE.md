@@ -2,23 +2,22 @@
 
 ## Project Overview
 
-**autoroster** converts screenshots of shift worker calendars into Apple Calendar events. The core workflow:
+**autoroster** converts screenshots of shift worker calendars into Google Calendar / iCloud events. The core workflow:
 
 1. Accept a screenshot of a calendar/roster
-2. Use vision/OCR to extract shift data (dates, times, shift types)
+2. Use Claude's vision API to extract shift data (dates, times, shift types)
 3. Parse the extracted data into structured calendar events
-4. Write events to Apple Calendar via native APIs or AppleScript
+4. Write events to the user's calendar via Google Calendar API or iCloud CalDAV
 
-## Intended Architecture
+## Architecture
 
 - **Language**: Python
-- **Vision/OCR**: Google Cloud Vision API (`google-cloud-vision`) — handles coloured cell backgrounds and varied fonts robustly. `Pillow` is retained for thumbnail generation.
+- **Vision**: Anthropic Claude API (`anthropic`) — Claude's multimodal vision understands coloured cell backgrounds, varied fonts, and grid layouts without preprocessing. `Pillow` is retained for thumbnail generation.
 - **Calendar integration**: Google Calendar API and iCloud via CalDAV
 - **Web interface**: Flask
+- **Hosting**: Vercel (serverless, via `api/index.py` + `vercel.json`)
 
-## Development Setup (to be established)
-
-When setting up the project, follow these conventions:
+## Development Setup
 
 ### Python Project Setup
 ```bash
@@ -32,24 +31,32 @@ pip install -r requirements.txt
 pip install -e ".[dev]"
 ```
 
-### Expected Directory Structure
+### Directory Structure
 ```
 autoroster/
 ├── CLAUDE.md
 ├── README.md
-├── pyproject.toml          # or requirements.txt
+├── pyproject.toml
+├── requirements.txt
+├── vercel.json              # Vercel deployment config
 ├── .gitignore
-├── autoroster/             # main package
+├── app.py                   # Flask application
+├── api/
+│   └── index.py             # Vercel entry point (imports app from app.py)
+├── autoroster/              # main package
 │   ├── __init__.py
-│   ├── cli.py              # entry point / CLI
-│   ├── vision.py           # screenshot parsing / OCR
-│   ├── parser.py           # structured data extraction
-│   └── calendar.py         # Apple Calendar integration
+│   ├── vision.py            # screenshot parsing via Claude vision
+│   ├── parser.py            # structured data extraction
+│   ├── auth/
+│   │   ├── google.py
+│   │   └── apple.py
+│   └── calendar_clients/
+│       ├── google_cal.py
+│       └── icloud_cal.py
 └── tests/
     ├── conftest.py
     ├── test_vision.py
-    ├── test_parser.py
-    └── test_calendar.py
+    └── test_parser.py
 ```
 
 ## Coding Conventions
@@ -62,11 +69,11 @@ autoroster/
 
 ## Key Workflows
 
-### Running the tool (once implemented)
+### Running locally
 ```bash
-python -m autoroster path/to/screenshot.png
-# or via CLI entry point:
-autoroster path/to/screenshot.png
+flask run --port 5000
+# or:
+python app.py
 ```
 
 ### Running tests
@@ -82,33 +89,39 @@ ruff check .
 black --check .
 ```
 
+### Deploying to Vercel
+```bash
+vercel deploy
+```
+
 ## Environment Variables
 
-**Cloud Run (production)**: no credentials env var is needed. Attach a service account
-with the *Cloud Vision API User* role to the Cloud Run service; the
-`google-cloud-vision` client discovers credentials automatically via the GCP
-metadata server (Application Default Credentials).
-
-**Local development**: set the path to a service account JSON key:
+Set these in `.env` locally and in Vercel's project settings for production:
 
 ```
-GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account-key.json
+# Flask
+SECRET_KEY=<random secret string>
+
+# Anthropic — image parsing
+ANTHROPIC_API_KEY=<your Anthropic API key>
+
+# Google OAuth + Calendar
+GOOGLE_CLIENT_ID=<...>
+GOOGLE_CLIENT_SECRET=<...>
+GOOGLE_REDIRECT_URI=https://<your-vercel-domain>/auth/google/callback
 ```
 
-The Google Cloud Vision API is the only external service. Volume is always
-under 1,000 images/month so it stays within the free tier.
+The Anthropic API key is the only cloud credential needed for image parsing.
+Get one at https://console.anthropic.com.
 
-## Apple Calendar Integration
+## Vercel Notes
 
-This runs on macOS only. Calendar write access requires:
-- macOS 10.14+ Calendar permission granted to the terminal/app
-- `EventKit` access via PyObjC (`pyobjc-framework-EventKit`) or AppleScript
-
-When using AppleScript:
-```python
-import subprocess
-subprocess.run(["osascript", "-e", applescript_string], check=True)
-```
+- `vercel.json` routes all requests to `api/index.py`, which re-exports the Flask `app`
+- Vercel's Python runtime serves Flask via WSGI automatically
+- Flask cookie-based sessions work fine across serverless invocations (client-side signed cookies)
+- Max request body size on Vercel is 4.5 MB — sufficient for mobile screenshots
+- Function timeout: 60 s (Pro) / 10 s (Hobby). The Claude API call typically completes in 3–8 s.
+- `SECRET_KEY` must be set as a Vercel environment variable (not `os.urandom`) so cookies remain valid across cold starts
 
 ## Git Conventions
 
@@ -119,8 +132,8 @@ subprocess.run(["osascript", "-e", applescript_string], check=True)
 
 ## Notes for AI Assistants
 
-- **Vision/OCR**: Use Google Cloud Vision API (`google-cloud-vision`) for all image parsing. Do not add pytesseract, opencv, or other local OCR libraries — Vision handles coloured backgrounds and varied layouts that local OCR cannot.
-- **No other cloud services** — Vision API is the only permitted external API. Do not add OpenAI, Anthropic, or any other AI API.
+- **Vision**: Use the Anthropic Claude API (`anthropic` package) with `client.messages.parse()` and a Pydantic output schema for structured extraction. Model: `claude-opus-4-6`. Do not add Google Cloud Vision, pytesseract, opencv, or other OCR libraries.
+- **No other AI APIs** — only the Anthropic API is used. Do not add OpenAI or other AI services.
 - When adding dependencies, update both `pyproject.toml` and `requirements.txt`
-- Tests should use `pytest` and mock the Vision API client (`google.cloud.vision.ImageAnnotatorClient`)
+- Tests should use `pytest` and mock the Anthropic client (`anthropic.Anthropic`)
 - Do not over-engineer — this is a focused utility tool
