@@ -51,6 +51,15 @@ def _inject_month_name():
 
 from autoroster.auth.apple import apple_bp  # noqa: E402
 from autoroster.auth.google import google_bp  # noqa: E402
+from autoroster.parser import SHIFT_DEFINITIONS  # noqa: E402
+
+_TITLE_TO_CODE = {defn["label"]: code for code, defn in SHIFT_DEFINITIONS.items()}
+
+
+@app.template_filter("shift_code")
+def _filter_shift_code(title: str) -> str:
+    return _TITLE_TO_CODE.get(title, "?")
+
 
 app.register_blueprint(google_bp, url_prefix="/auth/google")
 app.register_blueprint(apple_bp, url_prefix="/auth/apple")
@@ -224,6 +233,22 @@ def confirm():
         return redirect(url_for("preview"))
 
     provider = session["user"]["provider"]
+
+    # Check for conflicts with existing calendar events on the same dates.
+    try:
+        from datetime import date as _date
+        dates = [_date.fromisoformat(e["date"]) for e in events_data]
+        existing = _get_events_in_range(calendar_id, provider, min(dates), max(dates))
+        conflicts, clean_events = _detect_conflicts(events_data, existing)
+    except Exception:
+        conflicts, clean_events = [], events_data
+
+    if conflicts:
+        session["pending_conflicts"] = conflicts
+        session["clean_events"] = clean_events
+        session["conflict_calendar_id"] = calendar_id
+        return redirect(url_for("resolve"))
+
     try:
         event_ids = _write_events(events_data, calendar_id, provider)
         session.pop("pending_events", None)
@@ -237,6 +262,56 @@ def confirm():
     except Exception as exc:
         flash(f"Error writing events: {exc}", "error")
         return redirect(url_for("preview"))
+
+
+@app.route("/resolve", methods=["GET"])
+@login_required
+def resolve():
+    conflicts = session.get("pending_conflicts")
+    if not conflicts:
+        return redirect(url_for("upload"))
+    return render_template("resolve.html", conflicts=conflicts, user=session["user"])
+
+
+@app.route("/resolve", methods=["POST"])
+@login_required
+def resolve_post():
+    conflicts = session.get("pending_conflicts")
+    clean_events = session.get("clean_events", [])
+    calendar_id = session.get("conflict_calendar_id")
+    if not conflicts or not calendar_id:
+        return redirect(url_for("upload"))
+
+    provider = session["user"]["provider"]
+    events_to_write = list(clean_events)
+    event_ids_to_delete = []
+
+    for conflict in conflicts:
+        date_key = conflict["date"]
+        choice = request.form.get(f"choice_{date_key}", "keep")
+        if choice == "new":
+            event_ids_to_delete.append(conflict["existing"]["id"])
+            events_to_write.append(conflict["new"])
+        # "keep" → leave existing event, discard new one
+
+    try:
+        if event_ids_to_delete:
+            _delete_events(event_ids_to_delete, calendar_id, provider)
+        event_ids = _write_events(events_to_write, calendar_id, provider) if events_to_write else []
+        session.pop("pending_events", None)
+        session.pop("pending_conflicts", None)
+        session.pop("clean_events", None)
+        session.pop("conflict_calendar_id", None)
+        session["last_created"] = {
+            "event_ids": event_ids,
+            "calendar_id": calendar_id,
+            "provider": provider,
+            "count": len(event_ids),
+        }
+        return redirect(url_for("done"))
+    except Exception as exc:
+        flash(f"Error resolving conflicts: {exc}", "error")
+        return redirect(url_for("resolve"))
 
 
 @app.route("/done")
@@ -261,6 +336,46 @@ def undo():
     except Exception as exc:
         flash(f"Could not remove events: {exc}", "error")
     return redirect(url_for("upload"))
+
+
+_SHIFT_TITLES = {defn["label"] for defn in SHIFT_DEFINITIONS.values()}
+
+
+def _get_events_in_range(calendar_id: str, provider: str, start_date, end_date) -> list[dict]:
+    if provider == "google":
+        from autoroster.calendar_clients.google_cal import get_events_in_range
+        return get_events_in_range(session["credentials"], calendar_id, start_date, end_date)
+    if provider == "apple":
+        from autoroster.calendar_clients.icloud_cal import get_events_in_range
+        return get_events_in_range(session["icloud_credentials"], calendar_id, start_date, end_date)
+    return []
+
+
+def _detect_conflicts(new_events: list[dict], existing: list[dict]) -> tuple[list[dict], list[dict]]:
+    """Return (conflicts, clean_events).
+
+    Only flags existing events whose title matches a known shift type (to avoid
+    treating the user's own appointments as conflicts).
+    """
+    existing_by_date: dict[str, dict] = {}
+    for evt in existing:
+        if evt["title"] not in _SHIFT_TITLES:
+            continue
+        date_key = evt["start"][:10]  # "YYYY-MM-DD"
+        existing_by_date[date_key] = evt
+
+    conflicts: list[dict] = []
+    clean_events: list[dict] = []
+    for new_evt in new_events:
+        date_key = new_evt["date"]
+        if date_key in existing_by_date:
+            existing_evt = existing_by_date[date_key]
+            if existing_evt["title"] != new_evt["title"]:
+                conflicts.append({"date": date_key, "existing": existing_evt, "new": new_evt})
+            # identical shift on same day → silently skip (already in calendar)
+        else:
+            clean_events.append(new_evt)
+    return conflicts, clean_events
 
 
 def _get_calendars(provider: str) -> list:

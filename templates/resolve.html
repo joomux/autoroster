@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Resolve shift conflicts — autoroster{% endblock %}
+
+{% block content %}
+<div class="page-container">
+  <div class="page-header">
+    <h1>Shift conflicts</h1>
+    <p>
+      {{ conflicts|length }} date{{ 's' if conflicts|length != 1 else '' }} already
+      {{ 'have' if conflicts|length != 1 else 'has' }} a shift in your calendar that differs
+      from the new upload. Choose which to keep for each date.
+    </p>
+  </div>
+
+  <form method="post" action="{{ url_for('resolve_post') }}">
+
+    {% for conflict in conflicts %}
+    {% set d = conflict.date %}
+    <div class="card conflict-card">
+      <div class="conflict-date">{{ d | format_date }}</div>
+      <div class="conflict-options">
+
+        <!-- Keep existing -->
+        <label class="conflict-option" id="opt-keep-{{ loop.index }}">
+          <input
+            type="radio"
+            name="choice_{{ d }}"
+            value="keep"
+            checked
+            onchange="highlightConflict({{ loop.index }}, 'keep')"
+          />
+          <div class="conflict-option-body">
+            <div class="conflict-option-label">Keep existing</div>
+            <div class="conflict-shift">
+              <span class="shift-badge shift-badge-{{ conflict.existing.title | shift_code | lower }}">
+                {{ conflict.existing.title | shift_code }}
+              </span>
+              {{ conflict.existing.title }}
+            </div>
+            <div class="conflict-times">
+              {{ conflict.existing.start | format_time }} – {{ conflict.existing.end | format_time }}
+            </div>
+          </div>
+        </label>
+
+        <div class="conflict-vs">vs</div>
+
+        <!-- Use new -->
+        <label class="conflict-option" id="opt-new-{{ loop.index }}">
+          <input
+            type="radio"
+            name="choice_{{ d }}"
+            value="new"
+            onchange="highlightConflict({{ loop.index }}, 'new')"
+          />
+          <div class="conflict-option-body">
+            <div class="conflict-option-label">Use new</div>
+            <div class="conflict-shift">
+              <span class="shift-badge shift-badge-{{ conflict.new.shift_code | lower }}">
+                {{ conflict.new.shift_code }}
+              </span>
+              {{ conflict.new.title }}
+            </div>
+            <div class="conflict-times">
+              {{ conflict.new.start | format_time }} – {{ conflict.new.end | format_time }}
+            </div>
+          </div>
+        </label>
+
+      </div>
+    </div>
+    {% endfor %}
+
+    <div class="action-bar">
+      <a href="{{ url_for('upload') }}" class="btn btn-ghost">← Start over</a>
+      <button type="submit" class="btn btn-primary">Confirm choices</button>
+    </div>
+
+  </form>
+</div>
+
+<script>
+function highlightConflict(index, choice) {
+  const keepEl = document.getElementById("opt-keep-" + index);
+  const newEl  = document.getElementById("opt-new-"  + index);
+  if (!keepEl || !newEl) return;
+  keepEl.classList.toggle("conflict-option-selected", choice === "keep");
+  newEl.classList.toggle("conflict-option-selected",  choice === "new");
+}
+
+// Initialise highlight state on page load (all default to "keep")
+document.addEventListener("DOMContentLoaded", function () {
+  const total = {{ conflicts|length }};
+  for (let i = 1; i <= total; i++) {
+    highlightConflict(i, "keep");
+  }
+});
+</script>
+{% endblock %}

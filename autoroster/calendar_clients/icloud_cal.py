@@ -71,6 +71,35 @@ def create_events(credentials: dict, calendar_url: str, events: list[Event]) -> 
     return uids
 
 
+def get_events_in_range(credentials: dict, calendar_url: str, start_date, end_date) -> list[dict]:
+    """Return all events in [start_date, end_date] as {id, title, start, end} dicts."""
+    from datetime import datetime as _dt
+    client = _client(credentials)
+    calendar = client.calendar(url=calendar_url)
+    results = calendar.date_search(
+        start=_dt(start_date.year, start_date.month, start_date.day),
+        end=_dt(end_date.year, end_date.month, end_date.day, 23, 59, 59),
+        expand=True,
+    )
+    events = []
+    for obj in results:
+        try:
+            vevent = obj.vobject_instance.vevent
+            uid = str(vevent.uid.value)
+            title = str(vevent.summary.value) if hasattr(vevent, "summary") else ""
+            dtstart = vevent.dtstart.value
+            dtend = vevent.dtend.value
+            events.append({
+                "id": uid,
+                "title": title,
+                "start": dtstart.isoformat() if hasattr(dtstart, "isoformat") else str(dtstart),
+                "end": dtend.isoformat() if hasattr(dtend, "isoformat") else str(dtend),
+            })
+        except Exception:
+            continue
+    return events
+
+
 def delete_events(credentials: dict, calendar_url: str, uids: list[str]) -> None:
     """Delete events from iCloud calendar by UID. Best-effort: ignores individual failures."""
     client = _client(credentials)
