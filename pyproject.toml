@@ -24,6 +24,9 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=8", "pytest-cov", "ruff", "black"]
 
+[tool.setuptools.packages.find]
+include = ["autoroster*"]
+
 [tool.ruff]
 line-length = 100
 
