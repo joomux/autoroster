@@ -106,6 +106,11 @@ def login():
     return render_template("login.html")
 
 
+@app.route("/privacy")
+def privacy():
+    return render_template("privacy.html")
+
+
 @app.route("/logout")
 def logout():
     session.clear()
