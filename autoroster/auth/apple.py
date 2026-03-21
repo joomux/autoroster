@@ -69,16 +69,11 @@ def _verify_identity_token(identity_token: str) -> dict:
 
 @apple_bp.route("/login")
 def login():
-    params = {
-        "response_type": "code id_token",
-        "response_mode": "form_post",
-        "client_id": os.environ["APPLE_CLIENT_ID"],
-        "redirect_uri": os.environ["APPLE_REDIRECT_URI"],
-        "scope": "name email",
-        "state": os.urandom(16).hex(),
-    }
-    session["apple_oauth_state"] = params["state"]
-    return redirect(f"{APPLE_AUTH_URL}?{urlencode(params)}")
+    flash(
+        "Not implemented yet because Apple want to charge me $99/year and that's crazy. Just use Google instead.",
+        "error",
+    )
+    return redirect(url_for("login"))
 
 
 @apple_bp.route("/callback", methods=["POST"])
