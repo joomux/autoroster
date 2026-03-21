@@ -11,6 +11,14 @@ from google_auth_oauthlib.flow import Flow
 
 google_bp = Blueprint("google_auth", __name__)
 
+
+def _is_allowed(email: str) -> bool:
+    allowed = os.environ.get("ALLOWED_EMAILS", "")
+    if not allowed:
+        return True  # no restriction configured
+    return email.lower() in {e.strip().lower() for e in allowed.split(",")}
+
+
 SCOPES = [
     "openid",
     "https://www.googleapis.com/auth/userinfo.email",
@@ -94,10 +102,17 @@ def callback():
     resp.raise_for_status()
     profile = resp.json()
 
+    email = profile.get("email", "")
+    if not _is_allowed(email):
+        session.clear()
+        from flask import flash
+        flash("This Google account is not authorised to use autoroster.", "error")
+        return redirect(url_for("login"))
+
     session["user"] = {
         "provider": "google",
-        "email": profile.get("email", ""),
-        "name": profile.get("name", profile.get("email", "")),
+        "email": email,
+        "name": profile.get("name", email),
         "picture": profile.get("picture", ""),
     }
 

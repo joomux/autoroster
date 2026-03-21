@@ -10,6 +10,13 @@ import os
 import time
 from urllib.parse import urlencode
 
+
+def _is_allowed(email: str) -> bool:
+    allowed = os.environ.get("ALLOWED_EMAILS", "")
+    if not allowed:
+        return True  # no restriction configured
+    return email.lower() in {e.strip().lower() for e in allowed.split(",")}
+
 import jwt
 import requests
 from flask import Blueprint, flash, redirect, render_template, request, session, url_for
@@ -108,6 +115,11 @@ def callback():
 
     if not email:
         email = claims.get("email", "")
+
+    if not _is_allowed(email):
+        session.clear()
+        flash("This Apple account is not authorised to use autoroster.", "error")
+        return redirect(url_for("login"))
 
     session["user"] = {
         "provider": "apple",
