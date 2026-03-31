@@ -900,6 +900,11 @@ a:hover { text-decoration: underline; }
   color: #334155;
   margin: 0;
 }
+.home-footer-link {
+  color: #475569;
+  text-decoration: none;
+}
+.home-footer-link:hover { color: #94a3b8; text-decoration: underline; }
 
 /* ---- Homepage responsive ---- */
 @media (max-width: 900px) {

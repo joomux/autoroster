@@ -2,67 +2,29 @@
 {% block title %}Terms of Service — autoroster{% endblock %}
 
 {% block content %}
-<div class="page-container-narrow" style="max-width: 680px;">
+<div class="page-container-narrow" style="padding-top: 16px;">
   <div class="page-header">
     <h1>Terms of Service</h1>
-    <p>Last updated: 21 March 2026</p>
+    <p>Last updated: March 2026</p>
   </div>
 
-  <div class="card" style="display: flex; flex-direction: column; gap: 24px; line-height: 1.7;">
+  <div class="card" style="line-height: 1.75; font-size: 15px;">
+    <h2 style="font-size: 18px; margin-top: 0;">Use of the service</h2>
+    <p>autoroster is provided as-is for personal use. You may use it to import your own shift roster into your own calendar. You must not use it to process rosters belonging to other people without their consent.</p>
 
-    <section>
-      <h2 style="margin: 0 0 8px; font-size: 17px;">About this application</h2>
-      <p style="margin: 0;">autoroster is a private, invite-only tool that converts shift-worker roster screenshots into calendar events. Access is granted at the sole discretion of the operator. By using this application you agree to these terms.</p>
-    </section>
+    <h2 style="font-size: 18px;">Accuracy</h2>
+    <p>Shift data is extracted from your screenshot using AI. While we aim for accuracy, you should review the extracted shifts on the confirmation screen before adding them to your calendar. We are not liable for errors in extracted shift times or dates.</p>
 
-    <section>
-      <h2 style="margin: 0 0 8px; font-size: 17px;">Permitted use</h2>
-      <ul style="margin: 0; padding-left: 20px;">
-        <li>You may use autoroster only for your own personal roster management.</li>
-        <li>You must not attempt to circumvent the invite-only access controls or share your login credentials with others.</li>
-        <li>You must not use the application in any way that violates applicable laws or regulations.</li>
-      </ul>
-    </section>
+    <h2 style="font-size: 18px;">Calendar access</h2>
+    <p>By signing in with Google or Apple, you grant autoroster permission to create and delete calendar events on your behalf. We only create or delete events that you explicitly confirm in the app.</p>
 
-    <section>
-      <h2 style="margin: 0 0 8px; font-size: 17px;">Your content</h2>
-      <p style="margin: 0;">You retain ownership of all roster images and calendar data you submit. By uploading an image you grant autoroster a temporary, limited licence to process it for the sole purpose of extracting shift data on your behalf. Images are deleted immediately after processing and are never stored persistently.</p>
-    </section>
+    <h2 style="font-size: 18px;">Availability</h2>
+    <p>We make no guarantees about uptime or continued availability of the service. The service may be modified or discontinued at any time.</p>
 
-    <section>
-      <h2 style="margin: 0 0 8px; font-size: 17px;">Calendar access</h2>
-      <p style="margin: 0;">autoroster requests access to your Google Calendar or iCloud Calendar in order to create shift events. It will only create, and — if you choose to undo — delete, the events it has just added. It will not read, modify, or delete any other calendar data. You can revoke calendar access at any time via your Google or Apple account settings.</p>
-    </section>
-
-    <section>
-      <h2 style="margin: 0 0 8px; font-size: 17px;">Third-party services</h2>
-      <p style="margin: 0;">autoroster relies on third-party services including Anthropic (AI processing), Google, Apple, and Vercel (hosting). Your use of these services is subject to their respective terms. The operator is not responsible for the availability, accuracy, or actions of these services.</p>
-    </section>
-
-    <section>
-      <h2 style="margin: 0 0 8px; font-size: 17px;">No warranty</h2>
-      <p style="margin: 0;">autoroster is provided "as is" without warranty of any kind. The operator does not guarantee that the application will be available at all times, that shift data will be extracted without error, or that calendar events will be created correctly. You are responsible for verifying your calendar events after import.</p>
-    </section>
-
-    <section>
-      <h2 style="margin: 0 0 8px; font-size: 17px;">Limitation of liability</h2>
-      <p style="margin: 0;">To the maximum extent permitted by law, the operator shall not be liable for any loss or damage arising from your use of autoroster, including but not limited to missed shifts, incorrect calendar entries, or loss of data.</p>
-    </section>
-
-    <section>
-      <h2 style="margin: 0 0 8px; font-size: 17px;">Changes to these terms</h2>
-      <p style="margin: 0;">These terms may be updated from time to time. Continued use of the application after changes are posted constitutes acceptance of the revised terms.</p>
-    </section>
-
-    <section>
-      <h2 style="margin: 0 0 8px; font-size: 17px;">Contact</h2>
-      <p style="margin: 0;">Questions about these terms can be sent to <a href="mailto:jeremy.e.roberts@gmail.com">jeremy.e.roberts@gmail.com</a>.</p>
-    </section>
-
+    <h2 style="font-size: 18px;">Limitation of liability</h2>
+    <p>autoroster is provided without warranty of any kind. We are not responsible for any loss or damage resulting from the use of this service, including incorrect calendar events.</p>
   </div>
 
-  <p style="margin-top: 24px;">
-    <a href="{{ url_for('login') }}" class="btn btn-ghost" style="padding-left: 0;">← Back to sign in</a>
-  </p>
+  <p style="margin-top: 20px;"><a href="{{ url_for('login') }}">&larr; Back to home</a></p>
 </div>
 {% endblock %}
