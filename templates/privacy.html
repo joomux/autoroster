@@ -2,66 +2,34 @@
 {% block title %}Privacy Policy — autoroster{% endblock %}
 
 {% block content %}
-<div class="page-container-narrow" style="max-width: 680px;">
+<div class="page-container-narrow" style="padding-top: 16px;">
   <div class="page-header">
     <h1>Privacy Policy</h1>
-    <p>Last updated: 21 March 2026</p>
+    <p>Last updated: March 2026</p>
   </div>
 
-  <div class="card" style="display: flex; flex-direction: column; gap: 24px; line-height: 1.7;">
+  <div class="card" style="line-height: 1.75; font-size: 15px;">
+    <h2 style="font-size: 18px; margin-top: 0;">What we collect</h2>
+    <p>When you sign in with Google or Apple, we receive your name, email address, and profile picture from that provider so we can display them in the app. We also receive OAuth credentials (access tokens) that allow us to write events to your calendar on your behalf.</p>
+    <p>Your roster screenshot is sent to the Anthropic Claude API to extract shift data. The image is processed in memory and is <strong>not stored</strong> on our servers at any point.</p>
 
-    <section>
-      <h2 style="margin: 0 0 8px; font-size: 17px;">What autoroster is</h2>
-      <p style="margin: 0;">autoroster is a personal productivity tool that reads screenshots of shift-worker rosters and creates events in your Google Calendar or Apple iCloud Calendar. It is a private, invite-only application.</p>
-    </section>
+    <h2 style="font-size: 18px;">What we don't collect</h2>
+    <p>We do not store your roster screenshots, the shift data extracted from them, or any calendar event content. No analytics, tracking scripts, or advertising cookies are used.</p>
 
-    <section>
-      <h2 style="margin: 0 0 8px; font-size: 17px;">What data we collect</h2>
-      <ul style="margin: 0; padding-left: 20px;">
-        <li><strong>Account identity</strong> — your name, email address, and profile picture, obtained from Google or Apple at sign-in and stored only for the duration of your session.</li>
-        <li><strong>Roster images</strong> — screenshots you upload are sent to the Anthropic API for shift extraction. They are processed in memory and deleted immediately after parsing. They are never stored on disk or in a database.</li>
-        <li><strong>Calendar credentials</strong> — Google OAuth tokens and Apple app-specific passwords are stored in an encrypted, server-side session cookie and used solely to write events to your calendar. They are never logged or shared.</li>
-      </ul>
-    </section>
+    <h2 style="font-size: 18px;">How we use your data</h2>
+    <p>Your OAuth credentials are held in a signed, encrypted session cookie in your browser for the duration of your session. They are used only to write the calendar events you explicitly confirm.</p>
 
-    <section>
-      <h2 style="margin: 0 0 8px; font-size: 17px;">What data we do not collect</h2>
-      <ul style="margin: 0; padding-left: 20px;">
-        <li>We do not store your roster images or extracted shift data after your session ends.</li>
-        <li>We do not use analytics, advertising trackers, or third-party cookies.</li>
-        <li>We do not sell or share your data with any third party beyond the services listed below.</li>
-      </ul>
-    </section>
+    <h2 style="font-size: 18px;">Third-party services</h2>
+    <ul>
+      <li><strong>Anthropic Claude API</strong> — processes your screenshot to extract shift data. See <a href="https://www.anthropic.com/privacy" target="_blank" rel="noopener">Anthropic's Privacy Policy</a>.</li>
+      <li><strong>Google Calendar API</strong> — used when you sign in with Google. See <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google's Privacy Policy</a>.</li>
+      <li><strong>iCloud CalDAV</strong> — used when you sign in with Apple. See <a href="https://www.apple.com/legal/privacy/" target="_blank" rel="noopener">Apple's Privacy Policy</a>.</li>
+    </ul>
 
-    <section>
-      <h2 style="margin: 0 0 8px; font-size: 17px;">Third-party services</h2>
-      <ul style="margin: 0; padding-left: 20px;">
-        <li><strong>Anthropic API</strong> — your roster image is sent to Anthropic to extract shift data. Anthropic's data handling is governed by the <a href="https://www.anthropic.com/privacy" target="_blank" rel="noopener">Anthropic Privacy Policy</a>.</li>
-        <li><strong>Google</strong> — if you sign in with Google, Google's OAuth and Calendar APIs are used. See the <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google Privacy Policy</a>.</li>
-        <li><strong>Apple / iCloud</strong> — if you sign in with Apple, Apple's Sign In service and iCloud CalDAV are used. See the <a href="https://www.apple.com/legal/privacy/" target="_blank" rel="noopener">Apple Privacy Policy</a>.</li>
-        <li><strong>Vercel</strong> — the application is hosted on Vercel. See the <a href="https://vercel.com/legal/privacy-policy" target="_blank" rel="noopener">Vercel Privacy Policy</a>.</li>
-      </ul>
-    </section>
-
-    <section>
-      <h2 style="margin: 0 0 8px; font-size: 17px;">Session cookies</h2>
-      <p style="margin: 0;">autoroster uses a single, signed session cookie to maintain your login state and temporarily hold the events you are about to add to your calendar. This cookie is essential for the application to function and is not used for tracking. It expires when you sign out or close your browser session.</p>
-    </section>
-
-    <section>
-      <h2 style="margin: 0 0 8px; font-size: 17px;">Your rights</h2>
-      <p style="margin: 0;">You may sign out at any time, which clears your session and all associated data held in it. Because autoroster does not retain personal data beyond your active session, there is nothing further to delete or export. You can revoke Google Calendar access at any time via your <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">Google Account security settings</a>.</p>
-    </section>
-
-    <section>
-      <h2 style="margin: 0 0 8px; font-size: 17px;">Contact</h2>
-      <p style="margin: 0;">This is a private application operated by Jeremy Roberts. Questions about this policy can be sent to <a href="mailto:jeremy.e.roberts@gmail.com">jeremy.e.roberts@gmail.com</a>.</p>
-    </section>
-
+    <h2 style="font-size: 18px;">Contact</h2>
+    <p>Questions? Please open an issue in the project repository.</p>
   </div>
 
-  <p style="margin-top: 24px;">
-    <a href="{{ url_for('login') }}" class="btn btn-ghost" style="padding-left: 0;">← Back to sign in</a>
-  </p>
+  <p style="margin-top: 20px;"><a href="{{ url_for('login') }}">&larr; Back to home</a></p>
 </div>
 {% endblock %}
