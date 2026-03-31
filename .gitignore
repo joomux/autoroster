@@ -11,5 +11,8 @@ build/
 htmlcov/
 uploads/
 *.p8
-.vercel
+.DS_Store
+.sfdx/
+.vercel/
+.cursor/
 .env*.local
