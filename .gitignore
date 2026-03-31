@@ -15,4 +15,4 @@ uploads/
 .sfdx/
 .vercel/
 .cursor/
-.env.local
+.env*.local

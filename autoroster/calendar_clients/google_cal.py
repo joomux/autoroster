@@ -53,6 +53,36 @@ def create_events(credentials_dict: dict, calendar_id: str, events: list[Event])
     return event_ids
 
 
+def get_events_in_range(credentials_dict: dict, calendar_id: str, start_date, end_date) -> list[dict]:
+    """Return all events in [start_date, end_date] as {id, title, start, end} dicts."""
+    import datetime as _dt
+    service = _build_service(credentials_dict)
+    time_min = _dt.datetime(start_date.year, start_date.month, start_date.day).isoformat() + "Z"
+    time_max = _dt.datetime(end_date.year, end_date.month, end_date.day, 23, 59, 59).isoformat() + "Z"
+    result = (
+        service.events()
+        .list(
+            calendarId=calendar_id,
+            timeMin=time_min,
+            timeMax=time_max,
+            singleEvents=True,
+            orderBy="startTime",
+        )
+        .execute()
+    )
+    events = []
+    for item in result.get("items", []):
+        start = item.get("start", {})
+        end = item.get("end", {})
+        events.append({
+            "id": item["id"],
+            "title": item.get("summary", ""),
+            "start": start.get("dateTime", start.get("date", "")),
+            "end": end.get("dateTime", end.get("date", "")),
+        })
+    return events
+
+
 def delete_events(credentials_dict: dict, calendar_id: str, event_ids: list[str]) -> None:
     """Delete events from Google Calendar by ID. Best-effort: ignores individual failures."""
     service = _build_service(credentials_dict)

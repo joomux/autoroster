@@ -10,6 +10,13 @@ import os
 import time
 from urllib.parse import urlencode
 
+
+def _is_allowed(email: str) -> bool:
+    allowed = os.environ.get("ALLOWED_EMAILS", "")
+    if not allowed:
+        return True  # no restriction configured
+    return email.lower() in {e.strip().lower() for e in allowed.split(",")}
+
 import jwt
 import requests
 from flask import Blueprint, flash, redirect, render_template, request, session, url_for
@@ -62,16 +69,11 @@ def _verify_identity_token(identity_token: str) -> dict:
 
 @apple_bp.route("/login")
 def login():
-    params = {
-        "response_type": "code id_token",
-        "response_mode": "form_post",
-        "client_id": os.environ["APPLE_CLIENT_ID"],
-        "redirect_uri": os.environ["APPLE_REDIRECT_URI"],
-        "scope": "name email",
-        "state": os.urandom(16).hex(),
-    }
-    session["apple_oauth_state"] = params["state"]
-    return redirect(f"{APPLE_AUTH_URL}?{urlencode(params)}")
+    flash(
+        "Not implemented yet because Apple want to charge me $99/year and that's crazy. Just use Google instead.",
+        "error",
+    )
+    return redirect(url_for("login"))
 
 
 @apple_bp.route("/callback", methods=["POST"])
@@ -108,6 +110,11 @@ def callback():
 
     if not email:
         email = claims.get("email", "")
+
+    if not _is_allowed(email):
+        session.clear()
+        flash("This Apple account is not authorised to use autoroster.", "error")
+        return redirect(url_for("login"))
 
     session["user"] = {
         "provider": "apple",
