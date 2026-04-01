@@ -82,7 +82,7 @@
   if (form && submitBtn) {
     form.addEventListener("submit", () => {
       submitBtn.disabled = true;
-      submitBtn.textContent = "Parsing…";
+      submitBtn.textContent = "Analysing…";
     });
   }
 })();
